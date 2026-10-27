@@ -1,61 +1,34 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
-  ArrowLeft,
-  MoreVertical,
-  Code2,
-  MessageSquare,
-  ChevronDown,
   ChevronRight,
-  Copy,
-  Check,
   ArrowDown,
+  ExternalLink,
+  CheckCircle2,
+  Clock,
   Terminal,
   FileCode,
-  Brain,
-  Sparkles,
-  ExternalLink,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Session, ChatMessage, ExecutionStep } from '../types';
 
 interface ChatViewProps {
   session: Session;
-  onBack: () => void;
-  onViewFile: (file: string, lines: string) => void;
-  onClearSession?: () => void;
+  onOpenFile: (filePath: string) => void;
+  onOpenTask: (taskTitle: string, taskLogs: string) => void;
 }
 
 export const ChatView: React.FC<ChatViewProps> = ({
   session,
-  onBack,
-  onViewFile,
-  onClearSession,
+  onOpenFile,
+  onOpenTask,
 }) => {
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [openAccordions, setOpenAccordions] = useState<Record<string, boolean>>({
-    step_4: true, // Ran test tools execution package is expanded by default
-  });
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [showScrollBottom, setShowScrollBottom] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  const toggleAccordion = (id: string) => {
-    setOpenAccordions((prev) => ({
-      ...prev,
-      [id]: !prev[id],
-    }));
-  };
-
-  const copyToClipboard = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 1500);
-  };
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
 
   const handleScroll = () => {
     if (!scrollRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-    setShowScrollBottom(scrollHeight - scrollTop - clientHeight > 100);
+    setShowScrollBottom(scrollHeight - scrollTop - clientHeight > 80);
   };
 
   const scrollToBottom = () => {
@@ -72,283 +45,174 @@ export const ChatView: React.FC<ChatViewProps> = ({
   }, [session.messages]);
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#0b0b0e] overflow-hidden relative">
-      {/* Chat Header */}
-      <div className="bg-[#0b0b0e] border-b border-[#27272a] px-3 py-2 flex items-center justify-between select-none z-10 shrink-0">
-        <div className="flex items-center gap-2.5 min-w-0">
-          {/* Back button */}
-          <button
-            onClick={onBack}
-            className="p-1 text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#18181c] rounded-[4px] transition-colors"
-            title="Back"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
+    <div
+      ref={scrollRef}
+      onScroll={handleScroll}
+      className="flex-1 overflow-y-auto px-4 py-6 md:px-8 space-y-6 relative selection:bg-[#27272e]"
+    >
+      <div className="max-w-4xl mx-auto space-y-6">
+        {session.messages.map((msg) => {
+          const isUser = msg.role === 'user';
 
-          {/* Session Title */}
-          <div className="flex flex-col min-w-0">
-            <h2 className="text-sm font-medium text-[#f4f4f5] truncate max-w-[200px] sm:max-w-md">
-              {session.title}
-            </h2>
-          </div>
-        </div>
-
-        {/* Right Icons: Options, Code, Chat, Avatar */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          <div className="relative">
-            <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="p-1.5 text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#18181c] rounded-[4px] transition-colors"
-              title="Options"
-            >
-              <MoreVertical className="w-4 h-4" />
-            </button>
-
-            {menuOpen && (
-              <div className="absolute right-0 mt-1.5 w-44 rounded-[4px] bg-[#18181c] border border-[#27272a] shadow-xl py-1 z-50">
-                <button
-                  onClick={() => {
-                    setMenuOpen(false);
-                    if (onClearSession) onClearSession();
-                  }}
-                  className="w-full text-left px-3 py-1.5 text-xs text-rose-400 hover:bg-[#27272a]"
-                >
-                  Clear Chat
-                </button>
-                <button
-                  onClick={() => {
-                    setMenuOpen(false);
-                    copyToClipboard(JSON.stringify(session, null, 2), 'export');
-                  }}
-                  className="w-full text-left px-3 py-1.5 text-xs text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a]"
-                >
-                  Export JSON
-                </button>
-              </div>
-            )}
-          </div>
-
-          <button
-            onClick={() => onViewFile('main.go', '#L80-140')}
-            className="p-1.5 text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#18181c] rounded-[4px] transition-colors"
-            title="Code"
-          >
-            <Code2 className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={() => {}}
-            className="p-1.5 text-cyan-400 bg-[#18181c] rounded-[4px] border border-cyan-800/30"
-            title="Chat"
-          >
-            <MessageSquare className="w-4 h-4" />
-          </button>
-
-          {/* User Avatar with red border ring */}
-          <div className="w-6 h-6 rounded-full p-[1.5px] bg-gradient-to-tr from-red-600 via-rose-500 to-amber-500 shadow-sm ml-1">
-            <div className="w-full h-full rounded-full bg-[#18181c] overflow-hidden flex items-center justify-center">
-              <svg className="w-full h-full text-zinc-300" viewBox="0 0 32 32" fill="currentColor">
-                <rect width="32" height="32" fill="#2d1519" />
-                <circle cx="16" cy="11" r="5" fill="#fbcfe8" />
-                <path d="M7 26 C7 20, 11 18, 16 18 C21 18, 25 20, 25 26 Z" fill="#991b1b" />
-                <polygon points="16,19 14,24 18,24" fill="#ffffff" />
-                <polygon points="16,21 15,26 17,26" fill="#dc2626" />
-              </svg>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Messages Stream Container */}
-      <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-3.5 py-4 space-y-4 pb-36"
-      >
-        {session.messages.map((msg) => (
-          <div key={msg.id} className="space-y-3">
-            {/* User Message */}
-            {msg.role === 'user' && (
-              <div className="rounded-[4px] bg-[#1e1e24] border border-[#27272a] p-3 text-sm text-[#f4f4f5] leading-relaxed shadow-sm">
-                {msg.content}
-              </div>
-            )}
-
-            {/* Assistant Execution Blocks */}
-            {msg.steps && msg.steps.length > 0 && (
-              <div className="space-y-2 py-1">
-                {msg.steps.map((step) => {
-                  const isOpen = !!openAccordions[step.id];
-
-                  // Step 2: Analyzed main.go #L80-140 (Interactive Row with Go icon)
-                  if (step.type === 'file_analysis') {
-                    return (
-                      <div
-                        key={step.id}
-                        onClick={() => onViewFile(step.file || 'main.go', step.lines || '#L80-140')}
-                        className="flex items-center gap-2 text-xs text-[#a1a1aa] hover:text-[#f4f4f5] cursor-pointer py-1 px-1 rounded-[4px] hover:bg-[#18181c] transition-colors"
-                      >
-                        <span className="font-normal">Analyzed</span>
-                        {/* Go logo cyan icon */}
-                        <span className="inline-flex items-center gap-1 font-mono text-cyan-400 bg-cyan-950/40 px-1.5 py-0.5 rounded-[4px] border border-cyan-800/40">
-                          <svg className="w-3 h-3 text-cyan-400 inline" viewBox="0 0 24 24" fill="currentColor">
-                            <circle cx="12" cy="12" r="10" fill="#00ADD8" />
-                            <text x="12" y="16" fontSize="11" fontWeight="bold" fill="#ffffff" textAnchor="middle">GO</text>
-                          </svg>
-                          <span>{step.file || 'main.go'} {step.lines || '#L80-140'}</span>
+          if (isUser) {
+            return (
+              <div key={msg.id} className="w-full flex justify-end">
+                <div className="w-full max-w-2xl rounded-2xl bg-[#1e1e24] border border-[#2b2b34] p-4 shadow-lg space-y-3">
+                  {/* Attached Image Thumbnail */}
+                  {msg.images && msg.images.length > 0 && (
+                    <div className="w-20 h-16 rounded-lg bg-[#141418] border border-[#2b2b34] p-1.5 flex flex-col justify-between overflow-hidden shadow-inner">
+                      <div className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                        <span className="text-[8px] font-mono text-[#8e8e98] truncate">
+                          specs.png
                         </span>
                       </div>
-                    );
-                  }
-
-                  // Step 3: Thought disclosure
-                  if (step.type === 'thought') {
-                    return (
-                      <div key={step.id} className="text-xs">
-                        <button
-                          onClick={() => toggleAccordion(step.id)}
-                          className="flex items-center gap-1.5 text-[#a1a1aa] hover:text-[#f4f4f5] py-1 transition-colors group"
-                        >
-                          <span className="font-medium text-[#a1a1aa] group-hover:text-[#f4f4f5]">
-                            {step.title}
-                          </span>
-                          {isOpen ? (
-                            <ChevronDown className="w-3 h-3 text-[#71717a]" />
-                          ) : (
-                            <ChevronRight className="w-3 h-3 text-[#71717a]" />
-                          )}
-                        </button>
-
-                        {isOpen && step.thoughtContent && (
-                          <div className="mt-1 pl-3 border-l-2 border-[#27272a] text-[#a1a1aa] text-[11px] font-mono leading-relaxed bg-[#121215] p-2.5 rounded-r-[4px]">
-                            <pre className="whitespace-pre-wrap">{step.thoughtContent}</pre>
-                          </div>
-                        )}
+                      <div className="space-y-1">
+                        <div className="h-1 bg-[#2b2b34] rounded w-full" />
+                        <div className="h-1 bg-[#2b2b34] rounded w-3/4" />
                       </div>
-                    );
-                  }
-
-                  // Step 4: Terminal Command Block
-                  if (step.type === 'terminal') {
-                    return (
-                      <div key={step.id} className="space-y-1.5 text-xs">
-                        <button
-                          onClick={() => toggleAccordion(step.id)}
-                          className="flex items-center gap-1.5 text-[#a1a1aa] hover:text-[#f4f4f5] py-1 transition-colors"
-                        >
-                          <span className="font-medium text-[#a1a1aa]">{step.title}</span>
-                          <ChevronDown
-                            className={`w-3.5 h-3.5 text-[#71717a] transition-transform duration-150 ${
-                              isOpen ? '' : '-rotate-90'
-                            }`}
-                          />
-                        </button>
-
-                        {isOpen && (
-                          <div className="terminal-box bg-[#09090c] border border-[#27272a] rounded-[4px] overflow-hidden text-xs font-mono shadow-inner">
-                            {/* Terminal Top Command Bar */}
-                            <div className="flex items-center justify-between px-3 py-2 bg-[#121216] border-b border-[#27272a]/70">
-                              <div className="flex items-center gap-1.5 min-w-0 pr-2">
-                                <span className="text-[#71717a] shrink-0 font-mono">
-                                  {step.workdir || '.../home/CITEOAI $'}
-                                </span>
-                                <span className="text-amber-400 font-semibold shrink-0">cd</span>
-                                <span className="text-[#a1a1aa] truncate font-mono">
-                                  {step.command?.replace(/^cd\s+/, '') || ''}
-                                </span>
-                              </div>
-
-                              <button
-                                onClick={() => copyToClipboard(step.command || '', step.id)}
-                                className="p-1 text-[#71717a] hover:text-[#f4f4f5] hover:bg-[#1e1e24] rounded-[4px] transition-colors shrink-0"
-                                title="Copy"
-                              >
-                                {copiedId === step.id ? (
-                                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                                ) : (
-                                  <Copy className="w-3.5 h-3.5" />
-                                )}
-                              </button>
-                            </div>
-
-                            {/* Terminal Output Log Area */}
-                            <div className="p-3 text-[11px] leading-relaxed text-[#a1a1aa] max-h-60 overflow-y-auto select-text font-mono">
-                              <pre className="whitespace-pre-wrap">
-                                {step.output?.split('\n').map((line, idx) => {
-                                  if (line.includes('--- PASS')) {
-                                    return (
-                                      <span key={idx} className="text-emerald-400 font-medium block">
-                                        {line}
-                                      </span>
-                                    );
-                                  }
-                                  if (line.includes('=== RUN')) {
-                                    return (
-                                      <span key={idx} className="text-[#71717a] block">
-                                        {line}
-                                      </span>
-                                    );
-                                  }
-                                  return <span key={idx} className="block">{line}</span>;
-                                })}
-                              </pre>
-                            </div>
-
-                            {/* Terminal Footer status */}
-                            <div className="px-3 py-1 bg-[#121216]/60 border-t border-[#27272a]/50 flex items-center justify-between text-[10px] text-[#71717a]">
-                              <span className="text-emerald-400 font-semibold font-mono">Exit 0</span>
-                              <span className="font-mono">Execution OK</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  }
-
-                  // Default / Generic Step (e.g. Explored file, ran commands)
-                  return (
-                    <div key={step.id} className="text-xs">
-                      <button
-                        onClick={() => toggleAccordion(step.id)}
-                        className="flex items-center gap-1.5 text-[#a1a1aa] hover:text-[#f4f4f5] py-1 transition-colors"
-                      >
-                        <span className="font-medium text-[#a1a1aa]">{step.title}</span>
-                        {isOpen ? (
-                          <ChevronDown className="w-3 h-3 text-[#71717a]" />
-                        ) : (
-                          <ChevronRight className="w-3 h-3 text-[#71717a]" />
-                        )}
-                      </button>
-
-                      {isOpen && step.subtitle && (
-                        <div className="mt-1 pl-3 text-[11px] text-[#71717a] font-mono">
-                          {step.subtitle}
-                        </div>
-                      )}
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  )}
 
-            {/* Assistant Final Markdown Message */}
-            {msg.role === 'assistant' && msg.content && (
-              <div className="rounded-[4px] bg-[#18181c] border border-[#27272a] p-4 text-xs sm:text-sm text-[#f4f4f5] shadow-sm select-text">
-                <div className="prose prose-invert max-w-none prose-sm prose-p:leading-relaxed prose-headings:text-[#f4f4f5] prose-headings:font-semibold prose-code:font-mono prose-code:text-cyan-300 prose-code:bg-[#121215] prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-[4px]">
-                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  {/* User Text */}
+                  <p className="text-sm text-[#f4f4f5] leading-relaxed select-text font-normal">
+                    {msg.content}
+                  </p>
                 </div>
               </div>
-            )}
-          </div>
-        ))}
+            );
+          }
+
+          // Assistant Message
+          return (
+            <div key={msg.id} className="w-full space-y-4">
+              {/* Image Previews / Thumbnails Side-by-Side (Matching Image 2) */}
+              {msg.images && msg.images.length >= 2 && (
+                <div className="flex items-center gap-3">
+                  {/* Thumbnail 1: Screen 1 Preview */}
+                  <div className="w-28 h-20 rounded-lg bg-[#141418] border border-[#27272e] p-2 flex flex-col justify-between shadow-md cursor-pointer hover:border-[#3f3f4a] transition-colors">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-sm bg-blue-500/80" />
+                      <div className="h-1.5 bg-[#27272e] rounded w-12" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1">
+                        <div className="w-1 h-1 rounded-full bg-[#0091ff]" />
+                        <div className="h-1 bg-[#2b2b34] rounded w-16" />
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-1 h-1 rounded-full bg-[#0091ff]" />
+                        <div className="h-1 bg-[#2b2b34] rounded w-10" />
+                      </div>
+                      <div className="h-1 bg-[#2b2b34] rounded w-14" />
+                    </div>
+                  </div>
+
+                  {/* Thumbnail 2: Screen 2 Preview */}
+                  <div className="w-28 h-20 rounded-lg bg-[#141418] border border-[#27272e] p-2 flex flex-col justify-between shadow-md cursor-pointer hover:border-[#3f3f4a] transition-colors">
+                    <div className="h-1.5 bg-[#27272e] rounded w-14" />
+                    <div className="space-y-1">
+                      <div className="h-1 bg-[#2b2b34] rounded w-full" />
+                      <div className="h-1 bg-[#2b2b34] rounded w-4/5" />
+                      <div className="h-1 bg-[#2b2b34] rounded w-3/5" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Message Content formatted with Markdown */}
+              <div className="text-sm text-[#d4d4d8] leading-relaxed space-y-3 font-normal">
+                <ReactMarkdown
+                  components={{
+                    p: ({ children }) => <p className="mb-2 leading-relaxed">{children}</p>,
+                    ul: ({ children }) => <ul className="space-y-2 my-2">{children}</ul>,
+                    li: ({ children }) => (
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#8e8e98] mt-1 select-none">•</span>
+                        <div className="flex-1">{children}</div>
+                      </li>
+                    ),
+                    code: ({ children }) => {
+                      const textVal = String(children);
+                      const isFilePath =
+                        textVal.includes('/') || textVal.includes('.go') || textVal.includes('.html');
+
+                      return (
+                        <code
+                          onClick={() => {
+                            if (isFilePath) onOpenFile(textVal);
+                          }}
+                          className={`font-mono text-xs px-1.5 py-0.5 rounded bg-[#1c1c22] border border-[#27272e] text-[#f4f4f5] ${
+                            isFilePath
+                              ? 'cursor-pointer hover:border-blue-500 hover:text-blue-400 transition-colors'
+                              : ''
+                          }`}
+                        >
+                          {children}
+                        </code>
+                      );
+                    },
+                    a: ({ href, children }) => (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1 font-mono text-xs underline decoration-blue-500/50 hover:decoration-blue-400 transition-colors"
+                      >
+                        {children}
+                        <ExternalLink className="w-3 h-3 inline" />
+                      </a>
+                    ),
+                  }}
+                >
+                  {msg.content}
+                </ReactMarkdown>
+              </div>
+
+              {/* Accordion Disclosures (Matching Image 2: '2m timer: Timer has expired >', etc.) */}
+              {msg.steps && msg.steps.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  {msg.steps.map((step) => (
+                    <button
+                      key={step.id}
+                      onClick={() =>
+                        onOpenTask(step.title, step.output || 'Task output logged successfully.')
+                      }
+                      className="w-full max-w-xl flex items-center justify-between px-3 py-2 rounded-lg bg-[#18181d] hover:bg-[#202027] border border-[#24242b] text-left transition-colors group shadow-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        {step.type === 'timer' ? (
+                          <Clock className="w-3.5 h-3.5 text-[#8e8e98] group-hover:text-blue-400 transition-colors" />
+                        ) : step.type === 'terminal' ? (
+                          <Terminal className="w-3.5 h-3.5 text-[#8e8e98] group-hover:text-blue-400 transition-colors" />
+                        ) : (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-[#8e8e98] group-hover:text-emerald-400 transition-colors" />
+                        )}
+                        <span className="text-xs font-mono text-[#d4d4d8] group-hover:text-white transition-colors">
+                          {step.title}
+                        </span>
+                      </div>
+                      <ChevronRight className="w-3.5 h-3.5 text-[#71717a] group-hover:text-white transition-colors" />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Trailing paragraph */}
+              <p className="text-xs text-[#8e8e98] pt-1">
+                Both workers are actively building the remote control system:
+              </p>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Floating Scroll to Bottom Button */}
+      {/* Floating Scroll to Bottom Button (Matching Image 2 '↓') */}
       {showScrollBottom && (
         <button
           onClick={scrollToBottom}
-          className="absolute bottom-28 right-4 z-30 p-2 rounded-full bg-[#1e1e24] hover:bg-[#27272a] text-[#f4f4f5] border border-[#27272a] shadow-lg transition-transform hover:scale-105"
-          title="Scroll down"
+          className="fixed bottom-24 right-8 md:right-16 z-20 w-8 h-8 rounded-full bg-[#1c1c22] hover:bg-[#25252d] border border-[#2b2b34] text-[#d4d4d8] hover:text-white flex items-center justify-center shadow-2xl transition-all"
+          title="Scroll to bottom"
         >
           <ArrowDown className="w-4 h-4" />
         </button>

@@ -12,12 +12,14 @@ export interface Session {
   updatedAt: string;
   relativeTime: string;
   hasActiveDot?: boolean;
+  isPinned?: boolean;
+  isArchived?: boolean;
   messages: ChatMessage[];
 }
 
 export interface ExecutionStep {
   id: string;
-  type: 'file_command' | 'file_analysis' | 'thought' | 'terminal' | 'generic';
+  type: 'file_command' | 'file_analysis' | 'thought' | 'terminal' | 'generic' | 'timer';
   title: string;
   subtitle?: string;
   duration?: string;
@@ -37,6 +39,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: string;
+  images?: string[];
   steps?: ExecutionStep[];
 }
 
@@ -61,4 +64,15 @@ export interface SystemSettings {
   sandboxMode: 'isolated' | 'full_vps';
   autoRotation: boolean;
   temperature: number;
+}
+
+export interface RightPanelTab {
+  id: string;
+  type: 'task' | 'file';
+  title: string;
+  subtitle?: string;
+  filePath?: string;
+  fileContent?: string;
+  taskTitle?: string;
+  taskLogs?: string;
 }

@@ -1,19 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Header } from './components/Header';
-import { ProjectExplorer } from './components/ProjectExplorer';
+import { Sidebar } from './components/Sidebar';
+import { ChatHeader } from './components/ChatHeader';
 import { ChatView } from './components/ChatView';
 import { ChatInputBar } from './components/ChatInputBar';
+import { RightPanel } from './components/RightPanel';
 import { SettingsModal } from './components/SettingsModal';
-import { FilePreviewModal } from './components/FilePreviewModal';
 import { NewSessionModal } from './components/NewSessionModal';
-import { INITIAL_PROJECTS, DEFAULT_SETTINGS, INITIAL_MODELS } from './mockData';
-import { Project, Session, ChatMessage, ExecutionStep, SystemSettings } from './types';
+import {
+  INITIAL_PROJECTS,
+  DEFAULT_SETTINGS,
+  MOCK_MAIN_GO,
+  MOCK_SERVER_GO,
+  MOCK_TASK_OUTPUT,
+} from './mockData';
+import { Project, Session, ChatMessage, SystemSettings, RightPanelTab } from './types';
 import { wsService, ConnectionStatus, WSMessage } from './services/websocket';
 
 export const App: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
-  // Default to Screen 1 (Project Explorer), but with active session available
-  const [currentView, setCurrentView] = useState<'projects' | 'chat'>('projects');
   const [activeSessionId, setActiveSessionId] = useState<string>('sess_citeoai_setup');
   const [selectedModel, setSelectedModel] = useState<string>('gemini-3.8-flash-high');
   const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
@@ -21,13 +25,37 @@ export const App: React.FC = () => {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [isStreaming, setIsStreaming] = useState(false);
 
-  // Modals state
-  const [filePreview, setFilePreview] = useState<{ open: boolean; file: string; lines: string }>({
-    open: false,
-    file: 'main.go',
-    lines: '#L80-140',
-  });
+  // 3-Column Layout States
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isRightPanelOpen, setIsRightPanelOpen] = useState(false);
 
+  // Right Panel Tabs
+  const [rightPanelTabs, setRightPanelTabs] = useState<RightPanelTab[]>([
+    {
+      id: 'tab_timer_task',
+      type: 'task',
+      title: 'ner: 2m, Prompt: 120s timer...',
+      taskTitle: 'Background Task Output',
+      taskLogs: MOCK_TASK_OUTPUT,
+    },
+    {
+      id: 'tab_main_go',
+      type: 'file',
+      title: 'main.go',
+      filePath: 'main.go #L1-30',
+      fileContent: MOCK_MAIN_GO,
+    },
+    {
+      id: 'tab_server_go',
+      type: 'file',
+      title: 'server.go',
+      filePath: 'internal/web/server.go #L1-96',
+      fileContent: MOCK_SERVER_GO,
+    },
+  ]);
+  const [activeTabId, setActiveTabId] = useState<string>('tab_timer_task');
+
+  // New session modal
   const [newSessionData, setNewSessionData] = useState<{
     open: boolean;
     projectId: string;
@@ -38,7 +66,10 @@ export const App: React.FC = () => {
     projectName: 'CITEOAI',
   });
 
-  // Find currently active session object
+  // Active Session & Project
+  const activeProject =
+    projects.find((p) => p.sessions.some((s) => s.id === activeSessionId)) || projects[0];
+
   const activeSession: Session =
     projects
       .flatMap((p) => p.sessions)
@@ -52,7 +83,22 @@ export const App: React.FC = () => {
       messages: [],
     };
 
-  // Subscribe to WebSocket status & messages
+  const activeRightPanelTab =
+    rightPanelTabs.find((t) => t.id === activeTabId) || rightPanelTabs[0];
+
+  // Auto-adapt sidebar on initial resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setIsSidebarOpen(false);
+      }
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // WebSocket Subscription
   useEffect(() => {
     const unsubStatus = wsService.onStatusChange((status) => {
       setConnectionStatus(status);
@@ -88,68 +134,13 @@ export const App: React.FC = () => {
         const steps = lastMsg.steps ? [...lastMsg.steps] : [];
 
         switch (msg.type) {
-          case 'thought': {
-            let thoughtStep = steps.find((s) => s.type === 'thought');
-            if (!thoughtStep) {
-              thoughtStep = {
-                id: `step_thought_${Date.now()}`,
-                type: 'thought',
-                title: 'Thinking...',
-                status: 'running',
-                thoughtContent: msg.delta || '',
-                expanded: true,
-              };
-              steps.push(thoughtStep);
-            } else {
-              thoughtStep.thoughtContent = (thoughtStep.thoughtContent || '') + '\n' + (msg.delta || '');
-            }
-            break;
-          }
-
-          case 'tool_start': {
-            steps.push({
-              id: `step_tool_${Date.now()}`,
-              type: 'terminal',
-              title: `Ran ${msg.name || 'tool'}`,
-              workdir: '.../home/CITEOAI $',
-              command: msg.args || '',
-              output: '',
-              status: 'running',
-              expanded: true,
-            });
-            break;
-          }
-
-          case 'tool_log': {
-            const toolStep = steps.filter((s) => s.type === 'terminal').pop();
-            if (toolStep) {
-              toolStep.output = (toolStep.output || '') + '\n' + (msg.output || '');
-            }
-            break;
-          }
-
-          case 'tool_end': {
-            const toolStep = steps.filter((s) => s.type === 'terminal').pop();
-            if (toolStep) {
-              toolStep.status = msg.success ? 'success' : 'failed';
-              toolStep.exitCode = msg.success ? 0 : 1;
-            }
-            break;
-          }
-
           case 'token': {
             lastMsg.content = (lastMsg.content || '') + (msg.delta || '');
             break;
           }
-
           case 'done': {
             if (msg.final_text) {
               lastMsg.content = msg.final_text;
-            }
-            const thoughtStep = steps.find((s) => s.type === 'thought');
-            if (thoughtStep) {
-              thoughtStep.title = 'Thought for 4s';
-              thoughtStep.status = 'success';
             }
             setIsStreaming(false);
             break;
@@ -174,55 +165,14 @@ export const App: React.FC = () => {
     });
   };
 
-  const handleSelectSession = (session: Session) => {
-    setActiveSessionId(session.id);
-    setCurrentView('chat');
-  };
-
-  const handleCreateSessionPrompt = (projectId: string) => {
-    const project = projects.find((p) => p.id === projectId);
-    setNewSessionData({
-      open: true,
-      projectId,
-      projectName: project ? project.name : 'Project',
-    });
-  };
-
-  const handleConfirmCreateSession = (title: string) => {
-    const newSession: Session = {
-      id: `sess_${Date.now()}`,
-      projectId: newSessionData.projectId,
-      title,
-      updatedAt: new Date().toISOString(),
-      relativeTime: 'Just now',
-      messages: [],
-    };
-
-    setProjects((prev) =>
-      prev.map((p) => {
-        if (p.id === newSessionData.projectId) {
-          return {
-            ...p,
-            sessions: [newSession, ...p.sessions],
-          };
-        }
-        return p;
-      })
-    );
-
-    setActiveSessionId(newSession.id);
-    setCurrentView('chat');
-  };
-
   const handleSendMessage = (text: string, modelId: string) => {
-    // Process client slash commands if typed
     if (text.startsWith('/clear')) {
       handleClearSession();
       return;
     }
 
     if (text.startsWith('/new')) {
-      handleCreateSessionPrompt('proj_citeoai');
+      handleNewConversation();
       return;
     }
 
@@ -230,9 +180,6 @@ export const App: React.FC = () => {
       handleClearSession();
       return;
     }
-
-    // Ensure we are in chat view
-    setCurrentView('chat');
 
     const userMessage: ChatMessage = {
       id: `usr_${Date.now()}`,
@@ -270,7 +217,6 @@ export const App: React.FC = () => {
 
     setIsStreaming(true);
 
-    // Send to WebSocket service
     wsService.send({
       type: 'prompt',
       session_id: activeSessionId,
@@ -288,53 +234,119 @@ export const App: React.FC = () => {
     );
   };
 
-  const handleRefresh = () => {
-    wsService.connect();
+  const handleOpenFile = (filePath: string) => {
+    const cleanPath = filePath.replace(/[`#]/g, '').trim();
+    const isServer = cleanPath.includes('server');
+    const tabId = isServer ? 'tab_server_go' : 'tab_main_go';
+
+    setActiveTabId(tabId);
+    setIsRightPanelOpen(true);
+  };
+
+  const handleOpenTask = (taskTitle: string, taskLogs: string) => {
+    const existing = rightPanelTabs.find((t) => t.title === taskTitle || t.id === 'tab_timer_task');
+    if (existing) {
+      existing.taskTitle = 'Background Task Output';
+      existing.taskLogs = taskLogs;
+      setActiveTabId(existing.id);
+    } else {
+      const newTab: RightPanelTab = {
+        id: `tab_task_${Date.now()}`,
+        type: 'task',
+        title: taskTitle.slice(0, 25) + '...',
+        taskTitle: 'Background Task Output',
+        taskLogs,
+      };
+      setRightPanelTabs((prev) => [...prev, newTab]);
+      setActiveTabId(newTab.id);
+    }
+    setIsRightPanelOpen(true);
+  };
+
+  const handleNewConversation = () => {
+    setNewSessionData({
+      open: true,
+      projectId: activeProject.id,
+      projectName: activeProject.name,
+    });
+  };
+
+  const handleConfirmCreateSession = (title: string) => {
+    const newSession: Session = {
+      id: `sess_${Date.now()}`,
+      projectId: newSessionData.projectId,
+      title,
+      updatedAt: new Date().toISOString(),
+      relativeTime: 'Just now',
+      messages: [],
+    };
+
+    setProjects((prev) =>
+      prev.map((p) => {
+        if (p.id === newSessionData.projectId) {
+          return {
+            ...p,
+            sessions: [newSession, ...p.sessions],
+          };
+        }
+        return p;
+      })
+    );
+
+    setActiveSessionId(newSession.id);
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0b0e] text-[#f4f4f5] flex flex-col justify-between selection:bg-[#27272a]">
-      {/* Top Header - Always visible on Screen 1; on Screen 2, Header in ChatView handles chat actions */}
-      <Header
-        status={connectionStatus}
-        onRefresh={handleRefresh}
+    <div className="flex h-screen w-full bg-[#0e0e11] text-[#f4f4f5] overflow-hidden antialiased">
+      {/* Column 1: Sidebar (Left) */}
+      <Sidebar
+        isOpen={isSidebarOpen}
+        onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+        projects={projects}
+        activeSessionId={activeSessionId}
+        onSelectSession={(sess) => {
+          setActiveSessionId(sess.id);
+          if (window.innerWidth < 768) setIsSidebarOpen(false);
+        }}
+        onNewConversation={handleNewConversation}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        onToggleChat={() => setCurrentView(currentView === 'projects' ? 'chat' : 'projects')}
-        inChatView={currentView === 'chat'}
       />
 
-      {/* Main Content Area: Responsive Dual/Mobile View */}
-      <main className="flex-1 flex flex-col overflow-hidden relative">
-        {currentView === 'projects' ? (
-          /* Screen 1: Project & Session Explorer */
-          <div className="flex-1 flex flex-col pb-36">
-            <ProjectExplorer
-              projects={projects}
-              activeSessionId={activeSessionId}
-              onSelectSession={handleSelectSession}
-              onCreateSession={handleCreateSessionPrompt}
-              onNewProject={() => handleCreateSessionPrompt('proj_citeoai')}
-            />
-          </div>
-        ) : (
-          /* Screen 2: Chat & Live Execution Stream */
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <ChatView
-              session={activeSession}
-              onBack={() => setCurrentView('projects')}
-              onViewFile={(file, lines) => setFilePreview({ open: true, file, lines })}
-              onClearSession={handleClearSession}
-            />
-          </div>
-        )}
-      </main>
+      {/* Column 2: Center Chat Area */}
+      <div className="flex-1 flex flex-col h-full min-w-0 bg-[#0e0e11] relative">
+        <ChatHeader
+          projectName={activeProject.name}
+          sessionTitle={activeSession.title}
+          isSidebarOpen={isSidebarOpen}
+          onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+          isRightPanelOpen={isRightPanelOpen}
+          onToggleRightPanel={() => setIsRightPanelOpen(!isRightPanelOpen)}
+          onUpdateClick={() => wsService.connect()}
+        />
 
-      {/* Bottom Floating/Docked Input Bar (Always accessible, matching both screenshots) */}
-      <ChatInputBar
-        onSendMessage={handleSendMessage}
-        selectedModel={selectedModel}
-        onSelectModel={setSelectedModel}
-        disabled={isStreaming}
+        <main className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
+          <ChatView
+            session={activeSession}
+            onOpenFile={handleOpenFile}
+            onOpenTask={handleOpenTask}
+          />
+
+          <ChatInputBar
+            onSendMessage={handleSendMessage}
+            selectedModel={selectedModel}
+            onSelectModel={setSelectedModel}
+            disabled={isStreaming}
+          />
+        </main>
+      </div>
+
+      {/* Column 3: Right Panel (Collapsible File Viewer & Task Output) */}
+      <RightPanel
+        isOpen={isRightPanelOpen}
+        onClose={() => setIsRightPanelOpen(false)}
+        activeTab={activeRightPanelTab}
+        tabs={rightPanelTabs}
+        onSelectTab={(tabId) => setActiveTabId(tabId)}
       />
 
       {/* Modals */}
@@ -343,13 +355,6 @@ export const App: React.FC = () => {
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
         onSave={(newS) => setSettings(newS)}
-      />
-
-      <FilePreviewModal
-        isOpen={filePreview.open}
-        onClose={() => setFilePreview({ ...filePreview, open: false })}
-        file={filePreview.file}
-        lines={filePreview.lines}
       />
 
       <NewSessionModal

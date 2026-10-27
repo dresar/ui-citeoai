@@ -1,22 +1,22 @@
-import { Project, ModelOption, SlashCommand, SystemSettings } from './types';
+import { Project, ModelOption, SlashCommand, SystemSettings, RightPanelTab } from './types';
 
 export const INITIAL_MODELS: ModelOption[] = [
-  { id: 'gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', provider: 'Google', tag: 'Fast' },
-  { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash', provider: 'Google', tag: 'Eco' },
+  { id: 'gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', provider: 'Google', tag: 'Recommended' },
+  { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash', provider: 'Google', tag: 'Fast' },
   { id: 'gpt-4o', name: 'GPT-4o', provider: 'OpenAI', tag: 'Pro' },
   { id: 'ollama-local', name: 'Ollama', provider: 'Local', tag: 'Offline' },
 ];
 
 export const SLASH_COMMANDS: SlashCommand[] = [
-  { command: '/learn', label: 'Learn', description: 'Persist patterns & corrections' },
+  { command: '/learn', label: 'Learn', description: 'Persist patterns & corrections to memory' },
   { command: '/teamwork', label: 'Teamwork', description: 'Coordinate multi-agent swarms' },
-  { command: '/boost', label: 'Boost', description: 'Deep strategic planning' },
-  { command: '/model', label: 'Model', description: 'Switch active LLM provider' },
+  { command: '/boost', label: 'Boost', description: 'Deep strategic planning & multi-turn reasoning' },
+  { command: '/model', label: 'Model', description: 'Switch active LLM provider endpoint' },
   { command: '/new', label: 'New', description: 'Start fresh agent session' },
-  { command: '/clear', label: 'Clear', description: 'Clear current conversation' },
+  { command: '/clear', label: 'Clear', description: 'Clear current conversation messages' },
   { command: '/reset', label: 'Reset', description: 'Reset memory & context buffer' },
   { command: '/compact', label: 'Compact', description: 'Summarize context tokens' },
-  { command: '/memory', label: 'Memory', description: 'Inspect agent state & memory' },
+  { command: '/memory', label: 'Memory', description: 'Inspect agent state & memory cache' },
   { command: '/stats', label: 'Stats', description: 'Show latency & token metrics' },
   { command: '/help', label: 'Help', description: 'Display commands guide' },
 ];
@@ -25,11 +25,156 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   apiKey: '••••••••••••••••••••••••••••••••',
   model: 'gemini-3.8-flash-high',
   provider: 'gemini',
-  systemPrompt: 'You are CITEOAI autonomous system assistant. Execute tasks with utmost accuracy and speed.',
+  systemPrompt: 'You are Antigravity autonomous system assistant. Execute tasks with utmost accuracy and speed.',
   sandboxMode: 'isolated',
   autoRotation: true,
   temperature: 0.2,
 };
+
+export const MOCK_SERVER_GO = `package web
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/gorilla/websocket"
+)
+
+type Server struct {
+	addr       string
+	upgrader   websocket.Upgrader
+	clients    map[*websocket.Conn]bool
+	broadcast  chan []byte
+	mu         sync.RWMutex
+	httpServer *http.Server
+}
+
+func NewServer(addr string) *Server {
+	return &Server{
+		addr: addr,
+		upgrader: websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool {
+				return true
+			},
+		},
+		clients:   make(map[*websocket.Conn]bool),
+		broadcast: make(chan []byte, 256),
+	}
+}
+
+func (s *Server) Start(ctx context.Context) error {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", s.handleWebSocket)
+	mux.HandleFunc("/health", s.handleHealth)
+
+	s.httpServer = &http.Server{
+		Addr:         s.addr,
+		Handler:      mux,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+	}
+
+	go s.dispatchBroadcast(ctx)
+
+	fmt.Printf("[SERVER] Listening on %s\\n", s.addr)
+	return s.httpServer.ListenAndServe()
+}
+
+func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	conn, err := s.upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		http.Error(w, "Upgrade failed", http.StatusBadRequest)
+		return
+	}
+
+	s.mu.Lock()
+	s.clients[conn] = true
+	s.mu.Unlock()
+
+	defer func() {
+		s.mu.Lock()
+		delete(s.clients, conn)
+		s.mu.Unlock()
+		conn.Close()
+	}()
+
+	for {
+		_, message, err := conn.ReadMessage()
+		if err != nil {
+			break
+		}
+		s.broadcast <- message
+	}
+}
+
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
+}
+
+func (s *Server) dispatchBroadcast(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg := <-s.broadcast:
+			s.mu.RLock()
+			for client := range s.clients {
+				client.WriteMessage(websocket.TextMessage, msg)
+			}
+			s.mu.RUnlock()
+		}
+	}
+}`;
+
+export const MOCK_MAIN_GO = `package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"citeoai/internal/web"
+)
+
+func main() {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8088"
+	}
+
+	server := web.NewServer(fmt.Sprintf(":%s", port))
+	log.Printf("[CITEOAI] Starting core engine on :%s ...", port)
+
+	if err := server.Start(ctx); err != nil {
+		log.Fatalf("Server shutdown error: %v", err)
+	}
+}`;
+
+export const MOCK_MAIN_GO_PREVIEW = MOCK_MAIN_GO;
+
+export const MOCK_TASK_OUTPUT = `[TASK agy02_1793131885] Status: RUNNING
+Target: /opt/data/home/CITEOAI-agy02
+Command: go run cmd/citeoai/main.go serve --port 8088
+WebSocket Ingress: ws://127.0.0.1:8088/ws
+Cloudflare Tunnel: https://citeoai.agentai.my.id -> http://127.0.0.1:8088
+
+[TASK agy04_1793131862] Status: RUNNING
+Target: /opt/data/home/ui-citeoai
+Command: npm run build
+Result: dist/index.html generated cleanly
+
+2m timer: Timer has expired (120s)
+Both background tasks dispatched successfully.`;
 
 export const INITIAL_PROJECTS: Project[] = [
   {
@@ -40,156 +185,57 @@ export const INITIAL_PROJECTS: Project[] = [
         id: 'sess_citeoai_setup',
         projectId: 'proj_citeoai',
         title: 'CITEOAI Engine Implementation Setup',
-        updatedAt: '2026-10-27T20:04:00Z',
-        relativeTime: '7m',
+        updatedAt: '2026-10-27T20:30:00Z',
+        relativeTime: '3h',
         hasActiveDot: false,
         messages: [
-          {
-            id: 'msg_u1',
-            role: 'user',
-            content: 'Analisis lagi semuanya mendalam lalu kamu tes semuanya ada system auto rotasi ai apapun itu bisa pakek banyak ai enpoint apapun ya cek analisis mendalam banget ya cek udah ada berapa file...',
-            timestamp: '7m ago',
-          },
           {
             id: 'msg_a1',
             role: 'assistant',
-            content: `### Analisis Arsitektur & Sistem Auto-Rotasi AI CITEOAI
+            content: `• **Repository Created**: [dresar/ui-citeoai](https://github.com/dresar/ui-citeoai) initialized with design specifications and mobile reference screenshots.
+• **Cloudflare Route Configured**: Subdomain \`citeoai.agentai.my.id\` mapped via CNAME to tunnel \`40522112-be2a-4342-acba-eafef7659cb4\` with ingress target \`http://127.0.0.1:8088\`.
+• **AGY04 (Frontend Owner)**: Task \`agy04_1793131862\` dispatched in \`/opt/data/home/ui-citeoai\` to build the mobile-first React/Vite/Tailwind dark dashboard, slash command popup, tool execution accordions, and static \`index.html\` build.
+• **AGY02 (Backend Core Owner)**: Task \`agy02_1793131885\` dispatched in \`/opt/data/home/CITEOAI-agy02\` to implement \`internal/web/server.go\`, WebSocket streaming on \`/ws\`, and \`citeoai serve --port 8088\`.
 
-Saya telah melakukan penelusuran mendalam terhadap seluruh struktur codebase CITEOAI dan memverifikasi fungsionalitas tool runner serta sistem rotasi AI multi-provider.
-
-#### 1. Inventarisasi File & Struktur Codebase
-Total file aktif terverifikasi: **142 file** (terdiri dari 68 Go source files, 12 test suites, modul konfigurasi, dan memory manager).
-- \`cmd/citeoai/\`: Entrypoint binary dan CLI dispatcher.
-- \`internal/agent/\`: Core execution loop dan memory context compaction.
-- \`internal/provider/\`: Multi-provider engine dengan fallback dinamis (Gemini, OpenAI, Anthropic, Ollama).
-- \`internal/sandbox/\`: Cgroup resource isolation (2 vCPU, 4GB RAM limit).
-- \`internal/tools/\`: File I/O, Command executor, Circular buffer output.
-
-#### 2. Mekanisme Auto-Rotasi AI Endpoint
-Sistem telah mendukung **Dynamic Multi-Endpoint Failover**:
-- **Primary**: Google Gemini 3.8 Flash High / Gemini 3.6 Flash.
-- **Secondary**: OpenAI GPT-4o / Azure OpenAI gateway.
-- **Local Fallback**: Local Ollama endpoint jika offline atau kuota habis.
-- **Health-Check**: Sistem otomatis memeriksa latency dan HTTP status code (429 Too Many Requests / 503 Overloaded) sebelum melakukan failover otomatis ke endpoint cadangan dalam waktu < 200ms.
-
-#### 3. Hasil Pengujian Unit & Sandbox
-Seluruh unit test pada package \`internal/tools\` telah dijalankan dan lulus 100% tanpa error (\`PASS\`, exit code 0). Semua buffer I/O aman dari memory leak.`,
-            timestamp: '7m ago',
+A 120-second timer is active while both workers execute their tasks.`,
+            timestamp: '3h ago',
+            images: [
+              'thumbnail_1',
+              'thumbnail_2',
+            ],
             steps: [
               {
-                id: 'step_1',
-                type: 'file_command',
-                title: 'Explored file, ran commands',
-                subtitle: 'Inspected 142 files in workspace',
+                id: 'step_timer_expired',
+                type: 'timer',
+                title: '2m timer: Timer has expired',
+                duration: '2m',
                 status: 'success',
-                expanded: false,
+                output: MOCK_TASK_OUTPUT,
               },
               {
-                id: 'step_2',
-                type: 'file_analysis',
-                title: 'Analyzed main.go #L80-140',
-                subtitle: 'main.go',
-                file: 'main.go',
-                lines: '#L80-140',
-                status: 'success',
-                expanded: false,
-              },
-              {
-                id: 'step_3',
-                type: 'thought',
-                title: 'Thought for 8s',
-                duration: '8s',
-                thoughtContent: `1. Scanning project architecture across /opt/data/home/CITEOAI.
-2. Checking internal/provider router and fallback mechanisms (Gemini, OpenAI, Anthropic, Ollama).
-3. Verifying cgroup v2 sandbox constraints (2 vCPU, 4GB RAM max).
-4. Running internal/tools unit tests to ensure circular buffer stability.
-5. Synthesizing comprehensive analysis report for user.`,
-                status: 'success',
-                expanded: false,
-              },
-              {
-                id: 'step_4',
-                type: 'terminal',
-                title: 'Ran test tools execution package',
-                workdir: '.../home/CITEOAI $',
-                command: 'cd /opt/data/home/CITEOAI && go test -v ./internal/tools/...',
-                output: `--- PASS: TestReadFileToolLimits (0.00s)
-=== RUN   TestWriteFileTool
---- PASS: TestWriteFileTool (0.01s)
-=== RUN   TestEditFileTool
---- PASS: TestEditFileTool (0.00s)
-=== RUN   TestRunCommandTool
---- PASS: TestRunCommandTool (0.01s)
-=== RUN   TestRunCommandCircularBuffer
---- PASS: TestRunCommandCircularBuffer (0.00s)
-=== RUN   TestRunCommandBackground
---- PASS: TestRunCommandBackground (0.00s)
-=== RUN   TestRunCommandTimeout
---- PASS: TestRunCommandTimeout (5.01s)
-=== RUN   TestListDirectoryTool`,
-                exitCode: 0,
-                status: 'success',
-                expanded: true,
-              },
-              {
-                id: 'step_5',
+                id: 'step_worked_29s',
                 type: 'generic',
-                title: 'Ran run uncached tools tests',
-                subtitle: 'All suites passed',
+                title: 'Worked for 29s',
+                duration: '29s',
                 status: 'success',
-                expanded: false,
+                output: `Compiled internal/web/server.go\nInitialized WebSocket endpoint on /ws\nConfigured CORS and ingress router for citeoai.agentai.my.id`,
+              },
+              {
+                id: 'step_timed_2m',
+                type: 'timer',
+                title: 'Timed 2m',
+                duration: '2m',
+                status: 'success',
+                output: MOCK_TASK_OUTPUT,
               },
             ],
           },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'proj_gowa',
-    name: 'gowa',
-    sessions: [
-      {
-        id: 'sess_gowa_err',
-        projectId: 'proj_gowa',
-        title: 'Troubleshooting Gowa Server Error',
-        updatedAt: '2026-10-25T12:00:00Z',
-        relativeTime: '2d',
-        hasActiveDot: false,
-        messages: [
           {
-            id: 'gowa_msg_1',
+            id: 'msg_u1',
             role: 'user',
-            content: 'Check why gowa WhatsApp gateway server returned error 502.',
-            timestamp: '2d ago',
-          },
-          {
-            id: 'gowa_msg_2',
-            role: 'assistant',
-            content: 'WebSocket connection closed abruptly due to timeout on device session ping.',
-            timestamp: '2d ago',
-          },
-        ],
-      },
-      {
-        id: 'sess_gowa_status',
-        projectId: 'proj_gowa',
-        title: 'Coba cek ini status nya coba kenapa statu...',
-        updatedAt: '2026-10-25T15:30:00Z',
-        relativeTime: '2d',
-        hasActiveDot: true,
-        messages: [
-          {
-            id: 'gowa_msg_3',
-            role: 'user',
-            content: 'Coba cek ini status nya coba kenapa status koneksi disconnect?',
-            timestamp: '2d ago',
-          },
-          {
-            id: 'gowa_msg_4',
-            role: 'assistant',
-            content: 'Status koneksi aktif kembali setelah auto-reconnect berhasil.',
-            timestamp: '2d ago',
+            content: 'pppppp aneh kau ni  kenapa ad ake gitu aku tadi kasih contoh gambar loo astaga  terus di header profil dan lain lain  hapus feedbcak hapus',
+            timestamp: 'Just now',
+            images: ['user_attachment_1'],
           },
         ],
       },
@@ -202,70 +248,123 @@ Seluruh unit test pada package \`internal/tools\` telah dijalankan dan lulus 100
       {
         id: 'sess_proskill_remote',
         projectId: 'proj_proskillai',
-        title: 'Remote Access Execution Request',
-        updatedAt: '2026-10-23T10:00:00Z',
-        relativeTime: '4d',
+        title: 'Remote Access Execution R...',
+        updatedAt: '2026-10-22T10:00:00Z',
+        relativeTime: '5d',
         hasActiveDot: false,
-        messages: [],
+        messages: [
+          {
+            id: 'proskill_msg_1',
+            role: 'assistant',
+            content: 'Remote Access execution verified and configured for proskillai gateway.',
+            timestamp: '5d ago',
+          },
+        ],
       },
       {
         id: 'sess_proskill_setup',
         projectId: 'proj_proskillai',
-        title: 'Remote Control Setup Request',
+        title: 'Remote Control Setup...',
         updatedAt: '2026-10-22T08:00:00Z',
         relativeTime: '5d',
+        isPinned: true,
+        isArchived: true,
         hasActiveDot: false,
-        messages: [],
+        messages: [
+          {
+            id: 'proskill_msg_2',
+            role: 'assistant',
+            content: 'Remote Control Daemon running on port 9090.',
+            timestamp: '5d ago',
+          },
+        ],
       },
       {
         id: 'sess_proskill_gh',
         projectId: 'proj_proskillai',
-        title: 'GitHub Repository Installation And Analysis',
+        title: 'GitHub Repository Installat...',
         updatedAt: '2026-10-22T04:00:00Z',
         relativeTime: '5d',
         hasActiveDot: false,
-        messages: [],
+        messages: [
+          {
+            id: 'proskill_msg_3',
+            role: 'assistant',
+            content: 'GitHub repository installation validated.',
+            timestamp: '5d ago',
+          },
+        ],
       },
     ],
   },
   {
     id: 'proj_cli',
     name: 'CLI Project',
-    sessions: [],
+    sessions: [
+      {
+        id: 'sess_cli_net_test',
+        projectId: 'proj_cli',
+        title: 'Network Connection Test',
+        updatedAt: '2026-10-26T14:00:00Z',
+        relativeTime: '1d',
+        hasActiveDot: true,
+        messages: [
+          {
+            id: 'cli_msg_1',
+            role: 'assistant',
+            content: 'Ping test completed: 12ms latency, 0% packet loss.',
+            timestamp: '1d ago',
+          },
+        ],
+      },
+      {
+        id: 'sess_cli_greeting',
+        projectId: 'proj_cli',
+        title: 'Casual Greeting',
+        updatedAt: '2026-10-25T11:00:00Z',
+        relativeTime: '2d',
+        hasActiveDot: true,
+        messages: [
+          {
+            id: 'cli_msg_2',
+            role: 'assistant',
+            content: 'Hello! Antigravity system ready for task execution.',
+            timestamp: '2d ago',
+          },
+        ],
+      },
+      {
+        id: 'sess_cli_test_conv',
+        projectId: 'proj_cli',
+        title: 'Test Conversation',
+        updatedAt: '2026-10-24T09:00:00Z',
+        relativeTime: '3d',
+        hasActiveDot: true,
+        messages: [
+          {
+            id: 'cli_msg_3',
+            role: 'assistant',
+            content: 'Test conversation session initialized.',
+            timestamp: '3d ago',
+          },
+        ],
+      },
+      {
+        id: 'sess_cli_net_connect',
+        projectId: 'proj_cli',
+        title: 'Network Connectivity Test',
+        updatedAt: '2026-10-23T18:00:00Z',
+        relativeTime: '4d',
+        hasActiveDot: true,
+        messages: [
+          {
+            id: 'cli_msg_4',
+            role: 'assistant',
+            content: 'Ingress and egress routes verified across cluster nodes.',
+            timestamp: '4d ago',
+          },
+        ],
+      },
+    ],
   },
 ];
-
-export const MOCK_MAIN_GO_PREVIEW = `package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	"time"
-
-	"citeoai/internal/provider"
-	"citeoai/internal/sandbox"
-)
-
-// Line 80-140: Multi-provider router and fallback execution
-func (r *ProviderRouter) DispatchPrompt(ctx context.Context, prompt string) (*Response, error) {
-	for i, endpoint := range r.endpoints {
-		if !endpoint.IsHealthy() {
-			continue
-		}
-		
-		ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
-		resp, err := endpoint.Send(ctxTimeout, prompt)
-		cancel()
-		
-		if err == nil {
-			r.metrics.RecordSuccess(endpoint.Name)
-			return resp, nil
-		}
-		
-		r.metrics.RecordError(endpoint.Name, err)
-		// Auto-failover to next available provider
-		fmt.Fprintf(os.Stderr, "[ROUTER] Fallback from %s to next provider\\n", endpoint.Name)
-	}
-	return nil, fmt.Errorf("all %d provider endpoints exhausted", len(r.endpoints))
-}`;

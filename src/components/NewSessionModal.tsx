@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Plus } from 'lucide-react';
+import { X } from 'lucide-react';
 
 interface NewSessionModalProps {
   isOpen: boolean;
@@ -27,22 +27,22 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm select-none">
-      <div className="w-full max-w-sm rounded-[4px] bg-[#18181c] border border-[#27272a] shadow-2xl p-4 animate-in fade-in zoom-in-95 duration-150">
-        <div className="flex items-center justify-between pb-2 mb-3 border-b border-[#27272a]">
-          <h3 className="text-xs font-semibold text-[#f4f4f5]">New Session</h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm select-none">
+      <div className="w-full max-w-sm rounded-2xl bg-[#18181d] border border-[#27272e] shadow-2xl p-5 animate-in fade-in zoom-in-95 duration-150">
+        <div className="flex items-center justify-between pb-3 mb-3 border-b border-[#232328]">
+          <h3 className="text-sm font-semibold text-[#f4f4f5]">New Conversation</h3>
           <button
             onClick={onClose}
-            className="p-1 text-[#71717a] hover:text-[#f4f4f5] rounded-[4px]"
+            className="p-1 text-[#8e8e98] hover:text-[#f4f4f5] rounded-lg transition-colors"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <div className="text-[11px] text-[#71717a] mb-1 font-mono">
-              Project: <span className="text-[#f4f4f5] font-semibold">{projectName}</span>
+            <div className="text-xs text-[#8e8e98] mb-1.5">
+              Project: <span className="text-[#f4f4f5] font-medium">{projectName}</span>
             </div>
             <input
               type="text"
@@ -50,22 +50,22 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Audit API routes"
-              className="w-full px-2.5 py-1.5 rounded-[4px] bg-[#121215] border border-[#27272a] text-xs text-[#f4f4f5] outline-none focus:border-cyan-500 font-normal"
+              className="w-full px-3 py-2 rounded-lg bg-[#141418] border border-[#27272e] text-xs text-[#f4f4f5] outline-none focus:border-[#0091ff] font-normal"
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-[#27272a]/60">
+          <div className="flex justify-end gap-2 pt-2 border-t border-[#232328]">
             <button
               type="button"
               onClick={onClose}
-              className="px-2.5 py-1 text-xs text-[#a1a1aa] hover:text-[#f4f4f5] bg-[#121215] rounded-[4px] border border-[#27272a]"
+              className="px-3.5 py-1.5 text-xs text-[#8e8e98] hover:text-[#f4f4f5] bg-[#18181d] hover:bg-[#202026] rounded-lg border border-[#27272e] transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!title.trim()}
-              className="px-3 py-1 text-xs bg-cyan-600 hover:bg-cyan-500 text-white rounded-[4px] disabled:opacity-50 font-medium"
+              className="px-4 py-1.5 text-xs bg-[#1a73e8] hover:bg-blue-600 text-white rounded-lg disabled:opacity-50 font-medium transition-colors"
             >
               Create
             </button>
