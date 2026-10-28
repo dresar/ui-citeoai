@@ -1,10 +1,37 @@
 import { Project, ModelOption, SlashCommand, SystemSettings } from './types';
 
 export const INITIAL_MODELS: ModelOption[] = [
-  { id: 'gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', provider: 'Google', tag: 'Recommended' },
-  { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash', provider: 'Google', tag: 'Fast' },
-  { id: 'gpt-4o', name: 'GPT-4o', provider: 'OpenAI', tag: 'Pro' },
-  { id: 'ollama-local', name: 'Ollama', provider: 'Local', tag: 'Offline' },
+  {
+    id: 'gemini-3.8-flash-high',
+    name: 'Gemini 3.8 Flash',
+    provider: 'Google',
+    tag: 'High',
+  },
+  {
+    id: 'claude-sonnet-4.6',
+    name: 'Claude Sonnet 4.6 (Thinking)',
+    provider: 'Anthropic',
+    badge: 'Notice',
+  },
+  {
+    id: 'claude-opus-4.6',
+    name: 'Claude Opus 4.6 (Thinking)',
+    provider: 'Anthropic',
+    badge: 'Notice',
+  },
+  {
+    id: 'gpt-oss-120b',
+    name: 'GPT-OSS 120B (Medium)',
+    provider: 'OpenAI',
+    badge: 'Notice',
+  },
+  {
+    id: 'gemini-4-argon',
+    name: 'Gemini 4 Argon',
+    provider: 'Google',
+    badge: 'Unavailable',
+    disabled: true,
+  },
 ];
 
 export const SLASH_COMMANDS: SlashCommand[] = [

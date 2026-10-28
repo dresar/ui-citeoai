@@ -4,11 +4,11 @@ import {
   ChevronUp,
   Mic,
   ArrowRight,
-  Check,
   Loader2,
 } from 'lucide-react';
 import { SlashCommand } from '../types';
 import { SLASH_COMMANDS, INITIAL_MODELS } from '../mockData';
+import { ModelPickerModal } from './ModelPickerModal';
 
 interface ChatInputBarProps {
   onSendMessage: (text: string, model: string) => void;
@@ -93,7 +93,7 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
   };
 
   return (
-    <div className="w-full px-3 sm:px-4 pb-3 sm:pb-4 pt-1 shrink-0 z-10 font-sans">
+    <div className={`w-full px-3 sm:px-4 pb-3 sm:pb-4 pt-1 shrink-0 font-sans ${modelPickerOpen ? 'relative z-40' : 'z-10'}`}>
       <div className="w-full max-w-4xl mx-auto relative flex flex-col">
         {/* Slash Command Autocomplete Popover */}
         {showSlashPopup && (
@@ -157,39 +157,26 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => setModelPickerOpen(!modelPickerOpen)}
+                  onClick={() => setModelPickerOpen((prev) => !prev)}
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-[#8e8e98] hover:text-[#f4f4f5] hover:bg-[#22222a] transition-colors"
                 >
                   <span>{currentModel.name}</span>
-                  <ChevronUp className="w-3.5 h-3.5 text-[#71717a]" />
+                  {currentModel.tag && (
+                    <span className="text-[11px] text-[#71717a] font-normal">{currentModel.tag}</span>
+                  )}
+                  <ChevronUp className={`w-3.5 h-3.5 text-[#71717a] transition-transform duration-150 ${modelPickerOpen ? 'rotate-180' : ''}`} />
                 </button>
 
-                {modelPickerOpen && (
-                  <div className="absolute bottom-full left-0 mb-2 w-48 rounded-xl bg-[#18181c] border border-[#2b2b34] shadow-2xl p-1.5 z-50">
-                    <div className="px-2 py-1 text-[11px] font-semibold text-[#71717a] uppercase tracking-wider">
-                      Select Model
-                    </div>
-                    {INITIAL_MODELS.map((model) => (
-                      <button
-                        key={model.id}
-                        onClick={() => {
-                          onSelectModel(model.id);
-                          setModelPickerOpen(false);
-                        }}
-                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
-                          model.id === selectedModel
-                            ? 'bg-[#22222a] text-[#f4f4f5] font-medium'
-                            : 'text-[#8e8e98] hover:text-[#f4f4f5] hover:bg-[#1e1e24]'
-                        }`}
-                      >
-                        <span>{model.name}</span>
-                        {model.id === selectedModel && (
-                          <Check className="w-3.5 h-3.5 text-[#0091ff]" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <ModelPickerModal
+                  isOpen={modelPickerOpen}
+                  onClose={() => setModelPickerOpen(false)}
+                  models={INITIAL_MODELS}
+                  selectedModelId={selectedModel}
+                  onSelectModel={(modelId) => {
+                    onSelectModel(modelId);
+                    setModelPickerOpen(false);
+                  }}
+                />
               </div>
             </div>
 

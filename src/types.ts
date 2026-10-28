@@ -50,6 +50,8 @@ export interface ModelOption {
   name: string;
   provider: string;
   tag?: string;
+  badge?: 'Notice' | 'Unavailable' | string;
+  disabled?: boolean;
 }
 
 export interface SlashCommand {
