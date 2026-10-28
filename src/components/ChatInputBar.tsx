@@ -62,17 +62,36 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
   };
 
   const toggleVoice = () => {
-    setIsRecording(!isRecording);
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert('Speech recognition not supported in this browser.');
+      return;
+    }
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
     if (!isRecording) {
-      setTimeout(() => {
-        setInputText((prev) => (prev ? `${prev} ` : '') + 'Jalankan verifikasi sistem...');
+      setIsRecording(true);
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setInputText((prev) => (prev ? `${prev} ` : '') + transcript);
         setIsRecording(false);
-      }, 2000);
+      };
+      recognition.onerror = () => {
+        setIsRecording(false);
+      };
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+      recognition.start();
+    } else {
+      setIsRecording(false);
     }
   };
 
   return (
-    <div className="w-full px-3 sm:px-4 pb-3 sm:pb-4 pt-1 shrink-0 z-10">
+    <div className="w-full px-3 sm:px-4 pb-3 sm:pb-4 pt-1 shrink-0 z-10 font-sans">
       <div className="w-full max-w-4xl mx-auto relative flex flex-col">
         {/* Slash Command Autocomplete Popover */}
         {showSlashPopup && (
@@ -108,10 +127,10 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
             value={inputText}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder="Ask anything, @ to mention, / for actions"
+            placeholder="Ask anything, / for actions"
             rows={1}
             disabled={disabled}
-            className="w-full bg-transparent text-sm text-[#f4f4f5] placeholder-[#71717a] resize-none outline-none max-h-32 min-h-[38px] py-1 px-1 font-normal leading-relaxed"
+            className="w-full bg-transparent text-sm text-[#f4f4f5] placeholder-[#71717a] resize-none outline-none max-h-32 min-h-[38px] py-1 px-1 font-normal leading-relaxed font-sans"
           />
 
           {/* Bottom Row Controls */}
@@ -121,7 +140,7 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
               <button
                 type="button"
                 className="p-1.5 text-[#8e8e98] hover:text-[#f4f4f5] hover:bg-[#22222a] rounded-lg transition-colors"
-                title="Add context or attachment"
+                title="Add context"
               >
                 <Plus className="w-4 h-4" />
               </button>
@@ -188,7 +207,7 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
                 className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
                   inputText.trim() && !disabled
                     ? 'bg-[#1a73e8] hover:bg-blue-600 text-white shadow-md cursor-pointer'
-                    : 'bg-[#1a73e8] text-white opacity-80 cursor-pointer'
+                    : 'bg-[#1a73e8] text-white opacity-40 cursor-not-allowed'
                 }`}
                 title="Send prompt"
               >

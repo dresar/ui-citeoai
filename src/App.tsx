@@ -6,19 +6,13 @@ import { ChatInputBar } from './components/ChatInputBar';
 import { RightPanel } from './components/RightPanel';
 import { SettingsModal } from './components/SettingsModal';
 import { NewSessionModal } from './components/NewSessionModal';
-import {
-  INITIAL_PROJECTS,
-  DEFAULT_SETTINGS,
-  MOCK_MAIN_GO,
-  MOCK_SERVER_GO,
-  MOCK_TASK_OUTPUT,
-} from './mockData';
-import { Project, Session, ChatMessage, SystemSettings, RightPanelTab } from './types';
+import { INITIAL_PROJECTS, DEFAULT_SETTINGS } from './mockData';
+import { Project, Session, ChatMessage, ExecutionStep, SystemSettings, RightPanelTab } from './types';
 import { wsService, ConnectionStatus, WSMessage } from './services/websocket';
 
 export const App: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
-  const [activeSessionId, setActiveSessionId] = useState<string>('sess_citeoai_setup');
+  const [activeSessionId, setActiveSessionId] = useState<string>('sess_default');
   const [selectedModel, setSelectedModel] = useState<string>('gemini-3.8-flash-high');
   const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -29,31 +23,9 @@ export const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isRightPanelOpen, setIsRightPanelOpen] = useState(false);
 
-  // Right Panel Tabs
-  const [rightPanelTabs, setRightPanelTabs] = useState<RightPanelTab[]>([
-    {
-      id: 'tab_timer_task',
-      type: 'task',
-      title: 'ner: 2m, Prompt: 120s timer...',
-      taskTitle: 'Background Task Output',
-      taskLogs: MOCK_TASK_OUTPUT,
-    },
-    {
-      id: 'tab_main_go',
-      type: 'file',
-      title: 'main.go',
-      filePath: 'main.go #L1-30',
-      fileContent: MOCK_MAIN_GO,
-    },
-    {
-      id: 'tab_server_go',
-      type: 'file',
-      title: 'server.go',
-      filePath: 'internal/web/server.go #L1-96',
-      fileContent: MOCK_SERVER_GO,
-    },
-  ]);
-  const [activeTabId, setActiveTabId] = useState<string>('tab_timer_task');
+  // Right Panel Tabs - starts clean and populated on demand
+  const [rightPanelTabs, setRightPanelTabs] = useState<RightPanelTab[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string>('');
 
   // New session modal
   const [newSessionData, setNewSessionData] = useState<{
@@ -77,14 +49,14 @@ export const App: React.FC = () => {
     projects[0]?.sessions[0] || {
       id: 'sess_default',
       projectId: 'proj_citeoai',
-      title: 'Default Session',
+      title: 'Main Session',
       updatedAt: new Date().toISOString(),
-      relativeTime: 'Just now',
+      relativeTime: 'now',
       messages: [],
     };
 
   const activeRightPanelTab =
-    rightPanelTabs.find((t) => t.id === activeTabId) || rightPanelTabs[0];
+    rightPanelTabs.find((t) => t.id === activeTabId) || null;
 
   // Auto-adapt sidebar on initial resize
   useEffect(() => {
@@ -114,6 +86,98 @@ export const App: React.FC = () => {
     };
   }, [activeSessionId]);
 
+  const handleOpenTask = (taskTitle: string, taskLogs: string) => {
+    const tabId = `tab_task_${taskTitle.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    setRightPanelTabs((prev) => {
+      const existing = prev.find((t) => t.id === tabId);
+      if (existing) {
+        return prev.map((t) =>
+          t.id === tabId
+            ? { ...t, taskLogs: taskLogs || t.taskLogs }
+            : t
+        );
+      }
+      return [
+        ...prev,
+        {
+          id: tabId,
+          type: 'task',
+          title: taskTitle.slice(0, 20) + (taskTitle.length > 20 ? '...' : ''),
+          taskTitle,
+          taskLogs,
+        },
+      ];
+    });
+    setActiveTabId(tabId);
+    setIsRightPanelOpen(true);
+  };
+
+  const handleOpenFile = async (rawPath: string) => {
+    const cleanPath = rawPath.replace(/[`#]/g, '').trim().split(' ')[0];
+    if (!cleanPath) return;
+
+    const tabId = `file_${cleanPath.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    const filename = cleanPath.split('/').pop() || cleanPath;
+
+    // Check if already in tabs
+    const existing = rightPanelTabs.find((t) => t.id === tabId);
+    if (existing) {
+      setActiveTabId(tabId);
+      setIsRightPanelOpen(true);
+      return;
+    }
+
+    // Add placeholder tab with loading
+    const newTab: RightPanelTab = {
+      id: tabId,
+      type: 'file',
+      title: filename,
+      filePath: cleanPath,
+      fileContent: `Loading ${cleanPath}...`,
+    };
+
+    setRightPanelTabs((prev) => [...prev, newTab]);
+    setActiveTabId(tabId);
+    setIsRightPanelOpen(true);
+
+    try {
+      const res = await fetch(`/api/file?path=${encodeURIComponent(cleanPath)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === 'ok' && typeof data.content === 'string') {
+          setRightPanelTabs((prev) =>
+            prev.map((t) => (t.id === tabId ? { ...t, fileContent: data.content } : t))
+          );
+          return;
+        } else {
+          setRightPanelTabs((prev) =>
+            prev.map((t) =>
+              t.id === tabId
+                ? { ...t, fileContent: `Failed to load file: ${data.error || 'File not found'}` }
+                : t
+            )
+          );
+        }
+      } else {
+        setRightPanelTabs((prev) =>
+          prev.map((t) =>
+            t.id === tabId
+              ? { ...t, fileContent: `HTTP Error: ${res.status} ${res.statusText}` }
+              : t
+          )
+        );
+      }
+    } catch (err: any) {
+      setRightPanelTabs((prev) =>
+        prev.map((t) =>
+          t.id === tabId
+            ? { ...t, fileContent: `Network Error: ${err?.message || 'Could not fetch file content'}` }
+            : t
+        )
+      );
+    }
+  };
+
   const handleIncomingWSMessage = (msg: WSMessage) => {
     const targetSessionId = msg.session_id || activeSessionId;
 
@@ -134,13 +198,68 @@ export const App: React.FC = () => {
         const steps = lastMsg.steps ? [...lastMsg.steps] : [];
 
         switch (msg.type) {
-          case 'token': {
+          case 'token':
+          case 'delta': {
             lastMsg.content = (lastMsg.content || '') + (msg.delta || '');
             break;
           }
+
+          case 'thought': {
+            lastMsg.thought = (lastMsg.thought || '') + (msg.delta || msg.content || '');
+            break;
+          }
+
+          case 'tool_start': {
+            const stepId = `tool_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+            const stepTitle = msg.name ? `${msg.name} ${msg.args || ''}`.trim() : 'Tool Execution';
+            steps.push({
+              id: stepId,
+              type: 'tool',
+              title: stepTitle,
+              command: msg.args,
+              output: '',
+              status: 'running',
+            });
+            break;
+          }
+
+          case 'tool_log':
+          case 'tool_result': {
+            const runningIndex = steps.map((s) => s.status).lastIndexOf('running');
+            const targetStep = runningIndex >= 0 ? runningIndex : steps.length - 1;
+            if (targetStep >= 0) {
+              const updated = { ...steps[targetStep] };
+              updated.output = (updated.output || '') + (msg.output || '');
+              steps[targetStep] = updated;
+            }
+            break;
+          }
+
+          case 'tool_end': {
+            const runningIndex = steps.map((s) => s.status).lastIndexOf('running');
+            const targetStep = runningIndex >= 0 ? runningIndex : steps.length - 1;
+            if (targetStep >= 0) {
+              const updated = { ...steps[targetStep] };
+              updated.status = msg.success !== false ? 'success' : 'failed';
+              steps[targetStep] = updated;
+
+              // Open right panel when tool finishes
+              handleOpenTask(updated.title, updated.output || 'Execution complete.');
+            }
+            break;
+          }
+
           case 'done': {
             if (msg.final_text) {
               lastMsg.content = msg.final_text;
+            }
+            setIsStreaming(false);
+            break;
+          }
+
+          case 'error': {
+            if (msg.error) {
+              lastMsg.content = (lastMsg.content ? lastMsg.content + '\n\n' : '') + `⚠️ ${msg.error}`;
             }
             setIsStreaming(false);
             break;
@@ -154,7 +273,7 @@ export const App: React.FC = () => {
         updatedSessions[sessionIndex] = {
           ...session,
           messages,
-          relativeTime: 'Just now',
+          relativeTime: 'now',
         };
 
         return {
@@ -185,14 +304,14 @@ export const App: React.FC = () => {
       id: `usr_${Date.now()}`,
       role: 'user',
       content: text,
-      timestamp: 'Just now',
+      timestamp: 'now',
     };
 
     const initialAssistantMessage: ChatMessage = {
       id: `ast_${Date.now()}`,
       role: 'assistant',
       content: '',
-      timestamp: 'Just now',
+      timestamp: 'now',
       steps: [],
     };
 
@@ -204,7 +323,7 @@ export const App: React.FC = () => {
         const updatedSessions = [...p.sessions];
         updatedSessions[sIndex] = {
           ...p.sessions[sIndex],
-          relativeTime: 'Just now',
+          relativeTime: 'now',
           messages: [...p.sessions[sIndex].messages, userMessage, initialAssistantMessage],
         };
 
@@ -234,33 +353,17 @@ export const App: React.FC = () => {
     );
   };
 
-  const handleOpenFile = (filePath: string) => {
-    const cleanPath = filePath.replace(/[`#]/g, '').trim();
-    const isServer = cleanPath.includes('server');
-    const tabId = isServer ? 'tab_server_go' : 'tab_main_go';
-
-    setActiveTabId(tabId);
-    setIsRightPanelOpen(true);
-  };
-
-  const handleOpenTask = (taskTitle: string, taskLogs: string) => {
-    const existing = rightPanelTabs.find((t) => t.title === taskTitle || t.id === 'tab_timer_task');
-    if (existing) {
-      existing.taskTitle = 'Background Task Output';
-      existing.taskLogs = taskLogs;
-      setActiveTabId(existing.id);
-    } else {
-      const newTab: RightPanelTab = {
-        id: `tab_task_${Date.now()}`,
-        type: 'task',
-        title: taskTitle.slice(0, 25) + '...',
-        taskTitle: 'Background Task Output',
-        taskLogs,
-      };
-      setRightPanelTabs((prev) => [...prev, newTab]);
-      setActiveTabId(newTab.id);
-    }
-    setIsRightPanelOpen(true);
+  const handleCloseTab = (tabId: string) => {
+    setRightPanelTabs((prev) => {
+      const filtered = prev.filter((t) => t.id !== tabId);
+      if (activeTabId === tabId) {
+        setActiveTabId(filtered.length > 0 ? filtered[filtered.length - 1].id : '');
+        if (filtered.length === 0) {
+          setIsRightPanelOpen(false);
+        }
+      }
+      return filtered;
+    });
   };
 
   const handleNewConversation = () => {
@@ -277,7 +380,7 @@ export const App: React.FC = () => {
       projectId: newSessionData.projectId,
       title,
       updatedAt: new Date().toISOString(),
-      relativeTime: 'Just now',
+      relativeTime: 'now',
       messages: [],
     };
 
@@ -297,7 +400,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-full bg-[#0e0e11] text-[#f4f4f5] overflow-hidden antialiased">
+    <div className="flex h-screen w-full bg-[#0e0e11] text-[#f4f4f5] overflow-hidden antialiased font-sans">
       {/* Column 1: Sidebar (Left) */}
       <Sidebar
         isOpen={isSidebarOpen}
@@ -310,6 +413,7 @@ export const App: React.FC = () => {
         }}
         onNewConversation={handleNewConversation}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        connectionStatus={connectionStatus}
       />
 
       {/* Column 2: Center Chat Area */}
@@ -321,7 +425,6 @@ export const App: React.FC = () => {
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
           isRightPanelOpen={isRightPanelOpen}
           onToggleRightPanel={() => setIsRightPanelOpen(!isRightPanelOpen)}
-          onUpdateClick={() => wsService.connect()}
         />
 
         <main className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
@@ -347,6 +450,7 @@ export const App: React.FC = () => {
         activeTab={activeRightPanelTab}
         tabs={rightPanelTabs}
         onSelectTab={(tabId) => setActiveTabId(tabId)}
+        onCloseTab={handleCloseTab}
       />
 
       {/* Modals */}

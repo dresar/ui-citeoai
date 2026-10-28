@@ -19,7 +19,7 @@ export interface Session {
 
 export interface ExecutionStep {
   id: string;
-  type: 'file_command' | 'file_analysis' | 'thought' | 'terminal' | 'generic' | 'timer';
+  type: 'file_command' | 'file_analysis' | 'thought' | 'terminal' | 'generic' | 'timer' | 'tool';
   title: string;
   subtitle?: string;
   duration?: string;
@@ -39,6 +39,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: string;
+  thought?: string;
   images?: string[];
   steps?: ExecutionStep[];
 }

@@ -1,10 +1,11 @@
-export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'simulated';
+export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected';
 
 export interface WSMessage {
   type: string;
   session_id?: string;
   project?: string;
   content?: string;
+  prompt?: string;
   model?: string;
   delta?: string;
   name?: string;
@@ -13,6 +14,8 @@ export interface WSMessage {
   success?: boolean;
   final_text?: string;
   error?: string;
+  projects?: string[];
+  sessions?: any[];
 }
 
 export type WSHandler = (msg: WSMessage) => void;
@@ -24,8 +27,6 @@ class WebSocketService {
   private statusHandlers: Set<StatusHandler> = new Set();
   private status: ConnectionStatus = 'disconnected';
   private reconnectTimer: any = null;
-  private reconnectAttempts = 0;
-  private maxReconnectAttempts = 3;
 
   constructor() {
     this.connect();
@@ -60,6 +61,11 @@ class WebSocketService {
 
     if (typeof window === 'undefined') return;
 
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
     this.setStatus('connecting');
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host || 'localhost:8088';
@@ -70,7 +76,6 @@ class WebSocketService {
 
       this.ws.onopen = () => {
         this.setStatus('connected');
-        this.reconnectAttempts = 0;
       };
 
       this.ws.onmessage = (event) => {
@@ -78,125 +83,47 @@ class WebSocketService {
           const data: WSMessage = JSON.parse(event.data);
           this.handlers.forEach((h) => h(data));
         } catch {
-          // non-json message
+          // Ignore non-json payload
         }
       };
 
       this.ws.onerror = () => {
-        if (this.status !== 'simulated') {
-          this.setStatus('disconnected');
-        }
+        this.setStatus('disconnected');
       };
 
       this.ws.onclose = () => {
         this.ws = null;
-        if (this.reconnectAttempts < this.maxReconnectAttempts) {
-          this.reconnectAttempts++;
-          this.reconnectTimer = setTimeout(() => this.connect(), 2000 * this.reconnectAttempts);
-        } else {
-          // Switch to simulated fallback mode
-          this.setStatus('simulated');
-        }
+        this.setStatus('disconnected');
+        this.scheduleReconnect();
       };
     } catch {
-      this.setStatus('simulated');
+      this.setStatus('disconnected');
+      this.scheduleReconnect();
     }
   }
 
-  public send(msg: WSMessage) {
+  private scheduleReconnect() {
+    if (this.reconnectTimer) return;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect();
+    }, 3000);
+  }
+
+  public send(msg: WSMessage): boolean {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg));
+      return true;
     } else {
-      // Offline / Simulated execution fallback
-      this.handleSimulatedRequest(msg);
-    }
-  }
-
-  private handleSimulatedRequest(msg: WSMessage) {
-    if (msg.type === 'prompt') {
-      const prompt = msg.content || '';
-      const sessionId = msg.session_id || 'sess_default';
-
-      // 1. Send thought stream
-      setTimeout(() => {
-        this.handlers.forEach((h) =>
-          h({
-            type: 'thought',
-            session_id: sessionId,
-            delta: `Analyzing request: "${prompt.slice(0, 40)}..."\nEvaluating workspace constraints and execution environment.`,
-          })
-        );
-      }, 400);
-
-      // 2. Start tool execution
-      setTimeout(() => {
-        this.handlers.forEach((h) =>
-          h({
-            type: 'tool_start',
-            session_id: sessionId,
-            name: 'run_command',
-            args: 'go test -v ./internal/...',
-          })
-        );
-      }, 900);
-
-      // 3. Tool logs
-      setTimeout(() => {
-        this.handlers.forEach((h) =>
-          h({
-            type: 'tool_log',
-            session_id: sessionId,
-            output: `=== RUN   TestEngineInit\n--- PASS: TestEngineInit (0.01s)\n=== RUN   TestProviderRotation\n--- PASS: TestProviderRotation (0.02s)\nPASS`,
-          })
-        );
-      }, 1500);
-
-      // 4. Tool end
-      setTimeout(() => {
-        this.handlers.forEach((h) =>
-          h({
-            type: 'tool_end',
-            session_id: sessionId,
-            name: 'run_command',
-            success: true,
-          })
-        );
-      }, 1900);
-
-      // 5. Streaming final text
-      const simulatedResponse = `### Hasil Eksekusi Perintah
-
-Permintaan: "${prompt}" berhasil diproses.
-- **Provider**: ${msg.model || 'Gemini 3.8 Flash High'}
-- **Status Eksekusi**: Sukses (Exit code 0)
-- **Lingkungan**: Cgroup sandbox aktif (2 vCPU, 4GB RAM).
-
-Sistem auto-rotasi aktif dan seluruh endpoint siap beroperasi.`;
-
-      const words = simulatedResponse.split(' ');
-      let index = 0;
-      const interval = setInterval(() => {
-        if (index < words.length) {
-          const chunk = words[index] + (index === words.length - 1 ? '' : ' ');
-          this.handlers.forEach((h) =>
-            h({
-              type: 'token',
-              session_id: sessionId,
-              delta: chunk,
-            })
-          );
-          index++;
-        } else {
-          clearInterval(interval);
-          this.handlers.forEach((h) =>
-            h({
-              type: 'done',
-              session_id: sessionId,
-              final_text: simulatedResponse,
-            })
-          );
-        }
-      }, 35);
+      this.handlers.forEach((h) =>
+        h({
+          type: 'error',
+          session_id: msg.session_id,
+          error: 'WebSocket is not connected. Reconnecting to CITEOAI backend...',
+        })
+      );
+      this.connect();
+      return false;
     }
   }
 }

@@ -5,14 +5,13 @@ import {
   SlidersHorizontal,
   Clock,
   Plus,
-  ChevronDown,
   Pin,
   Archive,
-  MoreVertical,
   Settings,
   PanelLeftClose,
 } from 'lucide-react';
 import { Project, Session } from '../types';
+import { ConnectionStatus } from '../services/websocket';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -22,6 +21,7 @@ interface SidebarProps {
   onSelectSession: (session: Session) => void;
   onNewConversation: () => void;
   onOpenSettings: () => void;
+  connectionStatus: ConnectionStatus;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -32,17 +32,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectSession,
   onNewConversation,
   onOpenSettings,
+  connectionStatus,
 }) => {
-  const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({
-    proj_citeoai: true,
-    proj_proskillai: true,
-    proj_cli: true,
-  });
+  const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
+
+  const isFolderOpen = (folderId: string) => {
+    return openFolders[folderId] ?? true;
+  };
 
   const toggleFolder = (folderId: string) => {
     setOpenFolders((prev) => ({
       ...prev,
-      [folderId]: !prev[folderId],
+      [folderId]: !(prev[folderId] ?? true),
     }));
   };
 
@@ -56,13 +57,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         onClick={onToggle}
       />
 
-      <aside className="fixed md:static inset-y-0 left-0 z-40 w-64 md:w-[260px] bg-[#16161a] border-r border-[#232328] flex flex-col justify-between select-none shrink-0 transition-all duration-200 ease-in-out">
+      <aside className="fixed md:static inset-y-0 left-0 z-40 w-64 md:w-[260px] bg-[#16161a] border-r border-[#232328] flex flex-col justify-between select-none shrink-0 transition-all duration-200 ease-in-out font-sans">
         {/* Top Section */}
         <div className="flex flex-col flex-1 overflow-y-auto no-scrollbar p-3">
           {/* Header */}
           <div className="flex items-center justify-between pb-3 pt-1 px-1">
             <span className="text-[15px] font-semibold tracking-tight text-[#f4f4f5]">
-              Antigravity
+              CITEOAI
             </span>
             <button
               onClick={onToggle}
@@ -114,7 +115,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {/* Project List */}
             <div className="space-y-3 mt-1">
               {projects.map((project) => {
-                const isFolderOpen = openFolders[project.id] ?? true;
+                const folderOpen = isFolderOpen(project.id);
 
                 return (
                   <div key={project.id} className="space-y-1">
@@ -128,7 +129,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </button>
 
                     {/* Sessions inside Project */}
-                    {isFolderOpen && (
+                    {folderOpen && (
                       <div className="space-y-0.5 pl-2">
                         {project.sessions.map((sess) => {
                           const isActive = sess.id === activeSessionId;
@@ -176,13 +177,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Bottom Section */}
         <div className="p-3 border-t border-[#232328] space-y-2">
-          {/* Profile Bar */}
-          <div className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg bg-[#18181d] border border-[#27272c] text-xs font-mono">
+          {/* WebSocket Status Indicator */}
+          <div className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg bg-[#18181d] border border-[#27272c] text-xs">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-              <span className="text-[#f4f4f5] truncate font-medium">agy01-eka.ckp16799</span>
+              <span
+                className={`w-2 h-2 rounded-full shrink-0 transition-colors ${
+                  connectionStatus === 'connected'
+                    ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]'
+                    : connectionStatus === 'connecting'
+                    ? 'bg-amber-400 animate-pulse'
+                    : 'bg-zinc-600'
+                }`}
+              />
+              <span className="text-[#f4f4f5] truncate font-medium">
+                {connectionStatus === 'connected'
+                  ? 'CITEOAI Online'
+                  : connectionStatus === 'connecting'
+                  ? 'Connecting...'
+                  : 'CITEOAI Offline'}
+              </span>
             </div>
-            <ChevronDown className="w-3.5 h-3.5 text-[#8e8e98] shrink-0" />
+            <span className="text-[10px] text-[#71717a] font-mono uppercase">
+              {connectionStatus === 'connected' ? 'Connected' : connectionStatus}
+            </span>
           </div>
 
           {/* Settings Button */}
