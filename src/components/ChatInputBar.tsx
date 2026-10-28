@@ -5,6 +5,7 @@ import {
   Mic,
   ArrowRight,
   Check,
+  Loader2,
 } from 'lucide-react';
 import { SlashCommand } from '../types';
 import { SLASH_COMMANDS, INITIAL_MODELS } from '../mockData';
@@ -57,6 +58,7 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      if (disabled) return;
       handleSend();
     }
   };
@@ -127,10 +129,16 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
             value={inputText}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder="Ask anything, / for actions"
+            placeholder={
+              disabled
+                ? 'CITEOAI sedang berpikir/memproses...'
+                : 'Ask anything, / for actions'
+            }
             rows={1}
             disabled={disabled}
-            className="w-full bg-transparent text-sm text-[#f4f4f5] placeholder-[#71717a] resize-none outline-none max-h-32 min-h-[38px] py-1 px-1 font-normal leading-relaxed font-sans"
+            className={`w-full bg-transparent text-sm text-[#f4f4f5] placeholder-[#71717a] resize-none outline-none max-h-32 min-h-[38px] py-1 px-1 font-normal leading-relaxed font-sans ${
+              disabled ? 'cursor-not-allowed opacity-75' : ''
+            }`}
           />
 
           {/* Bottom Row Controls */}
@@ -205,13 +213,19 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({
                 onClick={handleSend}
                 disabled={!inputText.trim() || disabled}
                 className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                  inputText.trim() && !disabled
+                  disabled
+                    ? 'bg-[#1a73e8]/50 text-white cursor-not-allowed shadow-none'
+                    : inputText.trim()
                     ? 'bg-[#1a73e8] hover:bg-blue-600 text-white shadow-md cursor-pointer'
                     : 'bg-[#1a73e8] text-white opacity-40 cursor-not-allowed'
                 }`}
-                title="Send prompt"
+                title={disabled ? 'CITEOAI sedang berpikir/memproses...' : 'Send prompt'}
               >
-                <ArrowRight className="w-4 h-4" />
+                {disabled ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                ) : (
+                  <ArrowRight className="w-4 h-4" />
+                )}
               </button>
             </div>
           </div>

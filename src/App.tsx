@@ -191,6 +191,26 @@ export const App: React.FC = () => {
         const lastMsgIndex = messages.length - 1;
 
         if (lastMsgIndex < 0 || messages[lastMsgIndex].role !== 'assistant') {
+          if (msg.type === 'error' && msg.error) {
+            const errMessage: ChatMessage = {
+              id: `ast_err_${Date.now()}`,
+              role: 'assistant',
+              content: '',
+              timestamp: 'now',
+              error: msg.error,
+            };
+            const updatedSessions = [...project.sessions];
+            updatedSessions[sessionIndex] = {
+              ...session,
+              messages: [...messages, errMessage],
+              relativeTime: 'now',
+            };
+            setIsStreaming(false);
+            return {
+              ...project,
+              sessions: updatedSessions,
+            };
+          }
           return project;
         }
 
@@ -259,7 +279,9 @@ export const App: React.FC = () => {
 
           case 'error': {
             if (msg.error) {
-              lastMsg.content = (lastMsg.content ? lastMsg.content + '\n\n' : '') + `⚠️ ${msg.error}`;
+              lastMsg.error = msg.error;
+            } else {
+              lastMsg.error = 'Unknown provider or connection error occurred.';
             }
             setIsStreaming(false);
             break;
@@ -432,6 +454,8 @@ export const App: React.FC = () => {
             session={activeSession}
             onOpenFile={handleOpenFile}
             onOpenTask={handleOpenTask}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            isStreaming={isStreaming}
           />
 
           <ChatInputBar

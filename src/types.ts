@@ -42,6 +42,7 @@ export interface ChatMessage {
   thought?: string;
   images?: string[];
   steps?: ExecutionStep[];
+  error?: string;
 }
 
 export interface ModelOption {
